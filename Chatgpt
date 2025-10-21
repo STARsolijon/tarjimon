@@ -1,0 +1,76 @@
+import os
+import logging
+from dotenv import load_dotenv
+from telegram import Update
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
+from openai import OpenAI
+
+# --- .env fayldan tokenlarni yuklaymiz ---
+load_dotenv()
+TELEGRAM_TOKEN = os.getenv(7594572125:AAEQFvd44w_rU3KW5o7xbTvgBjoIUkQw79U)
+OPENAI_API_KEY = os.getenv(7594572125:AAEQFvd44w_rU3KW5o7xbTvgBjoIUkQw79U)
+
+client = OpenAI(api_key=OPENAI_API_KEY)
+
+# --- Logging (xatoliklar uchun) ---
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
+
+# --- Start buyrug‘i ---
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "👋 Salom! Men ChatGPT asosidagi botman.\n"
+        "Savolingizni yozing — men javob beraman.\n\n"
+        "Tarixni tozalash uchun /reset buyrug‘ini yuboring."
+    )
+
+# --- Tarixni saqlash uchun oddiy xotira ---
+user_history = {}
+
+# --- /reset buyrug‘i ---
+async def reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    user_history.pop(user_id, None)
+    await update.message.reply_text("✅ Suhbat tarixi tozalandi.")
+
+# --- Asosiy xabarlarni qayta ishlovchi ---
+async def chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    text = update.message.text
+
+    if user_id not in user_history:
+        user_history[user_id] = [{"role": "system", "content": "You are a helpful assistant."}]
+
+    user_history[user_id].append({"role": "user", "content": text})
+
+    try:
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=user_history[user_id],
+            temperature=0.7,
+            max_tokens=500
+        )
+        answer = response.choices[0].message.content
+        user_history[user_id].append({"role": "assistant", "content": answer})
+        await update.message.reply_text(answer)
+
+    except Exception as e:
+        logger.error(e)
+        await update.message.reply_text("❌ Xatolik yuz berdi, keyinroq urinib ko‘ring.")
+
+# --- Botni ishga tushirish funksiyasi ---
+def main():
+    app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("reset", reset))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, chat))
+
+    print("🤖 Bot ishga tushdi...")
+    app.run_polling()
+
+if __name__ == "__main__":
+    main()
